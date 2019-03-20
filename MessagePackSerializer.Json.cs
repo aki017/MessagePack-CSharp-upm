@@ -1,4 +1,5 @@
 ﻿using MessagePack.Formatters;
+using MessagePack.Internal;
 using System;
 using System.Globalization;
 using System.IO;
@@ -60,6 +61,20 @@ namespace MessagePack
             return binary;
         }
 
+        /// <summary>
+        /// return buffer is from memory pool, be careful to use. 
+        /// </summary>
+        internal static ArraySegment<byte> FromJsonUnsafe(TextReader reader)
+        {
+            var offset = 0;
+            byte[] binary = InternalMemoryPool.GetBuffer();  // from memory pool.
+            using (var jr = new TinyJsonReader(reader, false))
+            {
+                FromJsonCore(jr, ref binary, ref offset);
+            }
+            return new ArraySegment<byte>(binary, 0, offset);
+        }
+
         static uint FromJsonCore(TinyJsonReader jr, ref byte[] binary, ref int offset)
         {
             uint count = 0;
@@ -93,27 +108,27 @@ namespace MessagePack
                     case TinyJsonToken.EndArray:
                         return count; // break
                     case TinyJsonToken.Number:
-                        var v = jr.Value;
-                        if (v is double)
+                        var v = jr.ValueType;
+                        if (v == ValueType.Double)
                         {
-                            offset += MessagePackBinary.WriteDouble(ref binary, offset, (double)v);
+                            offset += MessagePackBinary.WriteDouble(ref binary, offset, jr.DoubleValue);
                         }
-                        else if (v is long)
+                        else if (v == ValueType.Long)
                         {
-                            offset += MessagePackBinary.WriteInt64(ref binary, offset, (long)v);
+                            offset += MessagePackBinary.WriteInt64(ref binary, offset, jr.LongValue);
                         }
-                        else if (v is ulong)
+                        else if (v == ValueType.ULong)
                         {
-                            offset += MessagePackBinary.WriteUInt64(ref binary, offset, (ulong)v);
+                            offset += MessagePackBinary.WriteUInt64(ref binary, offset, jr.ULongValue);
                         }
-                        else if (v is decimal)
+                        else if (v == ValueType.Decimal)
                         {
-                            offset += DecimalFormatter.Instance.Serialize(ref binary, offset, (decimal)v, null);
+                            offset += DecimalFormatter.Instance.Serialize(ref binary, offset, jr.DecimalValue, null);
                         }
                         count++;
                         break;
                     case TinyJsonToken.String:
-                        offset += MessagePackBinary.WriteString(ref binary, offset, (string)jr.Value);
+                        offset += MessagePackBinary.WriteString(ref binary, offset, jr.StringValue);
                         count++;
                         break;
                     case TinyJsonToken.True:

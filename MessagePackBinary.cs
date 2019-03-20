@@ -1860,6 +1860,35 @@ namespace MessagePack
             return extHeaderDecoders[bytes[offset]].Read(bytes, offset, out readSize);
         }
 
+#if NETSTANDARD1_4
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+#endif
+        public static int GetExtensionFormatHeaderLength(int dataLength)
+        {
+            switch (dataLength)
+            {
+                case 1:
+                case 2:
+                case 4:
+                case 8:
+                case 16:
+                    return 2;
+                default:
+                    if (dataLength <= byte.MaxValue)
+                    {
+                        return 3;
+                    }
+                    else if (dataLength <= UInt16.MaxValue)
+                    {
+                        return 4;
+                    }
+                    else
+                    {
+                        return 6;
+                    }
+            }
+        }
+
         // Timestamp spec
         // https://github.com/msgpack/msgpack/pull/209
         // FixExt4(-1) => seconds |  [1970-01-01 00:00:00 UTC, 2106-02-07 06:28:16 UTC) range
@@ -2040,7 +2069,7 @@ namespace MessagePack
                         }
 
                         MessagePackBinary.EnsureCapacity(ref bytes, offset, readCount + 1);
-                        stream.Read(bytes, offset + 1, readCount);
+                        ReadFully(stream, bytes, offset + 1, readCount);
                         return readCount + 1;
                     }
                 case MessagePackType.Unknown:
@@ -2049,7 +2078,7 @@ namespace MessagePack
                     return 1;
                 case MessagePackType.Float:
                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 5);
-                    stream.Read(bytes, offset + 1, 4);
+                    ReadFully(stream, bytes, offset + 1, 4);
                     return 5;
                 case MessagePackType.String:
                     {
@@ -2057,7 +2086,7 @@ namespace MessagePack
                         {
                             var length = bytes[offset] & 0x1F;
                             MessagePackBinary.EnsureCapacity(ref bytes, offset, 1 + length);
-                            stream.Read(bytes, offset + 1, length);
+                            ReadFully(stream, bytes, offset + 1, length);
                             return length + 1;
                         }
 
@@ -2066,33 +2095,33 @@ namespace MessagePack
                             case MessagePackCode.Str8:
                                 {
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 2);
-                                    stream.Read(bytes, offset + 1, 1);
+                                    ReadFully(stream, bytes, offset + 1, 1);
                                     var length = bytes[offset + 1];
 
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 2 + length);
-                                    stream.Read(bytes, offset + 2, length);
+                                    ReadFully(stream, bytes, offset + 2, length);
 
                                     return length + 2;
                                 }
                             case MessagePackCode.Str16:
                                 {
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 3);
-                                    stream.Read(bytes, offset + 1, 2);
+                                    ReadFully(stream, bytes, offset + 1, 2);
                                     var length = (bytes[offset + 1] << 8) + (bytes[offset + 2]);
 
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 3 + length);
-                                    stream.Read(bytes, offset + 3, length);
+                                    ReadFully(stream, bytes, offset + 3, length);
 
                                     return length + 3;
                                 }
                             case MessagePackCode.Str32:
                                 {
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 5);
-                                    stream.Read(bytes, offset + 1, 4);
+                                    ReadFully(stream, bytes, offset + 1, 4);
                                     var length = (bytes[offset + 1] << 24) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 8) | (bytes[offset + 4]);
 
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 5 + length);
-                                    stream.Read(bytes, offset + 5, length);
+                                    ReadFully(stream, bytes, offset + 5, length);
 
                                     return length + 5;
                                 }
@@ -2106,33 +2135,33 @@ namespace MessagePack
                             case MessagePackCode.Bin8:
                                 {
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 2);
-                                    stream.Read(bytes, offset + 1, 1);
+                                    ReadFully(stream, bytes, offset + 1, 1);
                                     var length = bytes[offset + 1];
 
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 2 + length);
-                                    stream.Read(bytes, offset + 2, length);
+                                    ReadFully(stream, bytes, offset + 2, length);
 
                                     return length + 2;
                                 }
                             case MessagePackCode.Bin16:
                                 {
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 3);
-                                    stream.Read(bytes, offset + 1, 2);
+                                    ReadFully(stream, bytes, offset + 1, 2);
                                     var length = (bytes[offset + 1] << 8) + (bytes[offset + 2]);
 
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 3 + length);
-                                    stream.Read(bytes, offset + 3, length);
+                                    ReadFully(stream, bytes, offset + 3, length);
 
                                     return length + 3;
                                 }
                             case MessagePackCode.Bin32:
                                 {
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 5);
-                                    stream.Read(bytes, offset + 1, 4);
+                                    ReadFully(stream, bytes, offset + 1, 4);
                                     var length = (bytes[offset + 1] << 24) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 8) | (bytes[offset + 4]);
 
                                     MessagePackBinary.EnsureCapacity(ref bytes, offset, 5 + length);
-                                    stream.Read(bytes, offset + 5, length);
+                                    ReadFully(stream, bytes, offset + 5, length);
 
                                     return length + 5;
                                 }
@@ -2149,7 +2178,7 @@ namespace MessagePack
                         if (readHeaderSize != 0)
                         {
                             MessagePackBinary.EnsureCapacity(ref bytes, offset, readHeaderSize + 1);
-                            stream.Read(bytes, offset + 1, readHeaderSize);
+                            ReadFully(stream, bytes, offset + 1, readHeaderSize);
                         }
 
                         var startOffset = offset;
@@ -2177,7 +2206,7 @@ namespace MessagePack
                         if (readHeaderSize != 0)
                         {
                             MessagePackBinary.EnsureCapacity(ref bytes, offset, readHeaderSize + 1);
-                            stream.Read(bytes, offset + 1, readHeaderSize);
+                            ReadFully(stream, bytes, offset + 1, readHeaderSize);
                         }
 
                         var startOffset = offset;
@@ -2202,11 +2231,11 @@ namespace MessagePack
 
                         switch (code)
                         {
-                            case MessagePackCode.FixExt1: readHeaderSize = 2; break;
-                            case MessagePackCode.FixExt2: readHeaderSize = 3; break;
-                            case MessagePackCode.FixExt4: readHeaderSize = 5; break;
-                            case MessagePackCode.FixExt8: readHeaderSize = 9; break;
-                            case MessagePackCode.FixExt16: readHeaderSize = 17; break;
+                            case MessagePackCode.FixExt1: readHeaderSize = 1; break;
+                            case MessagePackCode.FixExt2: readHeaderSize = 1; break;
+                            case MessagePackCode.FixExt4: readHeaderSize = 1; break;
+                            case MessagePackCode.FixExt8: readHeaderSize = 1; break;
+                            case MessagePackCode.FixExt16: readHeaderSize = 1; break;
                             case MessagePackCode.Ext8: readHeaderSize = 2; break;
                             case MessagePackCode.Ext16: readHeaderSize = 3; break;
                             case MessagePackCode.Ext32: readHeaderSize = 5; break;
@@ -2214,20 +2243,38 @@ namespace MessagePack
                         }
 
                         MessagePackBinary.EnsureCapacity(ref bytes, offset, readHeaderSize + 1);
-                        stream.Read(bytes, offset + 1, readHeaderSize);
+                        ReadFully(stream, bytes, offset + 1, readHeaderSize);
 
-                        int _;
-                        var header = ReadExtensionFormatHeader(bytes, offset, out _);
+                        if (!readOnlySingleMessage)
+                        {
+                            int _;
+                            var header = ReadExtensionFormatHeader(bytes, offset, out _);
 
-                        MessagePackBinary.EnsureCapacity(ref bytes, offset, 1 + readHeaderSize + (int)header.Length);
-                        stream.Read(bytes, offset + 1 + readHeaderSize, (int)header.Length);
+                            MessagePackBinary.EnsureCapacity(ref bytes, offset, 1 + readHeaderSize + (int)header.Length);
+                            ReadFully(stream, bytes, offset + 1 + readHeaderSize, (int)header.Length);
 
-                        return 1 + readHeaderSize + (int)header.Length;
+                            return 1 + readHeaderSize + (int)header.Length;
+                        }
+                        else
+                        {
+                            return readHeaderSize + 1;
+                        }
                     }
                 default: throw new InvalidOperationException("Invalid Code");
             }
         }
 
+        static void ReadFully(Stream stream, byte[] bytes, int offset, int readSize)
+        {
+            var nextLen = readSize;
+            while (nextLen != 0)
+            {
+                var len = stream.Read(bytes, offset, nextLen);
+                if (len == -1) return;
+                offset += len;
+                nextLen = nextLen - len;
+            }
+        }
 
 #if NETSTANDARD1_4
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
@@ -2987,9 +3034,9 @@ namespace MessagePack
 #endif
         public static ExtensionHeader ReadExtensionFormatHeader(Stream stream)
         {
-            var bytes = ReadMessageBlockFromStreamUnsafe(stream);
-            var offset = 0;
             int readSize;
+            var bytes = ReadMessageBlockFromStreamUnsafe(stream, true, out readSize);
+            var offset = 0;
 
             return ReadExtensionFormatHeader(bytes, offset, out readSize);
         }
