@@ -65,8 +65,30 @@ namespace MessagePack.Resolvers
 
         static readonly IFormatterResolver[] resolvers = new[]
         {
-            StandardResolver.Instance,
+            BuiltinResolver.Instance, // Try Builtin
+
+            AttributeFormatterResolver.Instance, // Try use [MessagePackFormatter]
+
+#if !NETSTANDARD1_4
+            MessagePack.Unity.UnityResolver.Instance,
+#endif
+
+#if !ENABLE_IL2CPP
+
+            DynamicEnumResolver.Instance, // Try Enum
+            DynamicGenericResolver.Instance, // Try Array, Tuple, Collection
+            DynamicUnionResolver.Instance, // Try Union(Interface)
+            DynamicObjectResolver.Instance, // Try Object
+#endif
+
             DynamicContractlessObjectResolver.Instance,
+
+            // finally, try primitive -> dynamic contractless
+#if NETSTANDARD1_4
+            DynamicObjectTypeFallbackResolver.Instance
+#else
+            PrimitiveObjectResolver.Instance
+#endif
         };
 
         ContractlessStandardResolver()

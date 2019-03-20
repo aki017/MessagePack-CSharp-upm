@@ -5,7 +5,6 @@
 <#@ import namespace="System.Collections.Generic" #>
 <#@ output extension=".cs" #>
 #if NETSTANDARD1_4
-
 using System;
 
 namespace MessagePack.Formatters
@@ -14,42 +13,34 @@ namespace MessagePack.Formatters
     Func<int, string> toT = x => "T" + ((x == 8) ? "Rest" : x.ToString());
     Func<int, string> toItem = x => ((x == 8) ? "Rest" : "Item" + x);
     var ts = string.Join(", ", Enumerable.Range(1, i).Select(x => toT(x))); 
-    var t = "Tuple<" + ts + ">"; 
+    var t = "ValueTuple<" + ts + ">"; 
 #>
 
-	public class TupleFormatter<<#= ts #>> : IMessagePackFormatter<<#= t #>>
+	public class ValueTupleFormatter<<#= ts #>> : IMessagePackFormatter<<#= t #>><#= (t.Contains("TRest") ? " where TRest : struct" : "") #>
     {
         public int Serialize(ref byte[] bytes, int offset, <#= t #> value, IFormatterResolver formatterResolver)
         {
-            if (value == null)
-            {
-                return MessagePackBinary.WriteNil(ref bytes, offset);
-            }
-            else
-            {
-				var startOffset = offset;
-				offset += MessagePackBinary.WriteArrayHeader(ref bytes, offset, <#= i #>);
+			var startOffset = offset;
+			offset += MessagePackBinary.WriteArrayHeader(ref bytes, offset, <#= i #>);
 
 <# for(var j = 1; j <= i; j++) { #>
-				offset += formatterResolver.GetFormatterWithVerify<<#= toT(j) #>>().Serialize(ref bytes, offset, value.<#= toItem(j) #>, formatterResolver);
+			offset += formatterResolver.GetFormatterWithVerify<<#= toT(j) #>>().Serialize(ref bytes, offset, value.<#= toItem(j) #>, formatterResolver);
 <# } #>
 
-				return offset - startOffset;
-			}
+			return offset - startOffset;
         }
 
         public <#= t #> Deserialize(byte[] bytes, int offset, IFormatterResolver formatterResolver, out int readSize)
         {
             if (MessagePackBinary.IsNil(bytes, offset))
             {
-                readSize = 1;
-                return null;
+                throw new InvalidOperationException("Data is Nil, ValueTuple can not be null.");
             }
             else
             {
 				var startOffset = offset;
 				var count = MessagePackBinary.ReadArrayHeader(bytes, offset, out readSize);
-				if (count != <#= i #>) throw new InvalidOperationException("Invalid Tuple count");
+				if (count != <#= i #>) throw new InvalidOperationException("Invalid ValueTuple count");
 				offset += readSize;
 
 <# for(var j = 1; j <= i; j++) { #>
@@ -58,12 +49,11 @@ namespace MessagePack.Formatters
 <# } #>
 			
 				readSize = offset - startOffset;
-				return new Tuple<<#= ts #>>(<#= string.Join(", ", Enumerable.Range(1, i).Select(x => "item" + x)) #>);
+				return new ValueTuple<<#= ts #>>(<#= string.Join(", ", Enumerable.Range(1, i).Select(x => "item" + x)) #>);
 			}
         }
     }
 
 <# } #>
 }
-
 #endif
