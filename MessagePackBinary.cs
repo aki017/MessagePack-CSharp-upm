@@ -12,6 +12,7 @@ namespace MessagePack
     public static partial class MessagePackBinary
     {
         const int MaxSize = 256; // [0] ~ [255]
+        const int ArrayMaxSize = 0x7FFFFFC7; // https://msdn.microsoft.com/en-us/library/system.array
 
         static readonly IMapHeaderDecoder[] mapHeaderDecoders = new IMapHeaderDecoder[MaxSize];
         static readonly IArrayHeaderDecoder[] arrayHeaderDecoders = new IArrayHeaderDecoder[MaxSize];
@@ -272,9 +273,23 @@ namespace MessagePack
                     FastResize(ref bytes, num);
                     return;
                 }
-                if (num < current * 2)
+
+                if (current == ArrayMaxSize)
                 {
-                    num = current * 2;
+                    throw new InvalidOperationException("byte[] size reached maximum size of array(0x7FFFFFC7), can not write to single byte[]. Details: https://msdn.microsoft.com/en-us/library/system.array");
+                }
+
+                var newSize = unchecked((current * 2));
+                if (newSize < 0) // overflow
+                {
+                    num = ArrayMaxSize;
+                }
+                else
+                {
+                    if (num < newSize)
+                    {
+                        num = newSize;
+                    }
                 }
 
                 FastResize(ref bytes, num);
@@ -417,6 +432,221 @@ namespace MessagePack
         public static bool IsNil(byte[] bytes, int offset)
         {
             return bytes[offset] == MessagePackCode.Nil;
+        }
+
+        public static int WriteRaw(ref byte[] bytes, int offset, byte[] rawMessagePackBlock)
+        {
+            EnsureCapacity(ref bytes, offset, rawMessagePackBlock.Length);
+
+#if NETSTANDARD1_4
+            if (UnsafeMemory.Is32Bit)
+            {
+                switch (rawMessagePackBlock.Length)
+                {
+                    case 1:
+                        UnsafeMemory32.WriteRaw1(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 2:
+                        UnsafeMemory32.WriteRaw2(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 3:
+                        UnsafeMemory32.WriteRaw3(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 4:
+                        UnsafeMemory32.WriteRaw4(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 5:
+                        UnsafeMemory32.WriteRaw5(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 6:
+                        UnsafeMemory32.WriteRaw6(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 7:
+                        UnsafeMemory32.WriteRaw7(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 8:
+                        UnsafeMemory32.WriteRaw8(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 9:
+                        UnsafeMemory32.WriteRaw9(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 10:
+                        UnsafeMemory32.WriteRaw10(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 11:
+                        UnsafeMemory32.WriteRaw11(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 12:
+                        UnsafeMemory32.WriteRaw12(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 13:
+                        UnsafeMemory32.WriteRaw13(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 14:
+                        UnsafeMemory32.WriteRaw14(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 15:
+                        UnsafeMemory32.WriteRaw15(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 16:
+                        UnsafeMemory32.WriteRaw16(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 17:
+                        UnsafeMemory32.WriteRaw17(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 18:
+                        UnsafeMemory32.WriteRaw18(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 19:
+                        UnsafeMemory32.WriteRaw19(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 20:
+                        UnsafeMemory32.WriteRaw20(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 21:
+                        UnsafeMemory32.WriteRaw21(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 22:
+                        UnsafeMemory32.WriteRaw22(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 23:
+                        UnsafeMemory32.WriteRaw23(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 24:
+                        UnsafeMemory32.WriteRaw24(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 25:
+                        UnsafeMemory32.WriteRaw25(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 26:
+                        UnsafeMemory32.WriteRaw26(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 27:
+                        UnsafeMemory32.WriteRaw27(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 28:
+                        UnsafeMemory32.WriteRaw28(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 29:
+                        UnsafeMemory32.WriteRaw29(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 30:
+                        UnsafeMemory32.WriteRaw30(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 31:
+                        UnsafeMemory32.WriteRaw31(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    default:
+                        Buffer.BlockCopy(rawMessagePackBlock, 0, bytes, offset, rawMessagePackBlock.Length);
+                        break;
+                }
+            }
+            else
+            {
+                switch (rawMessagePackBlock.Length)
+                {
+                    case 1:
+                        UnsafeMemory64.WriteRaw1(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 2:
+                        UnsafeMemory64.WriteRaw2(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 3:
+                        UnsafeMemory64.WriteRaw3(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 4:
+                        UnsafeMemory64.WriteRaw4(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 5:
+                        UnsafeMemory64.WriteRaw5(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 6:
+                        UnsafeMemory64.WriteRaw6(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 7:
+                        UnsafeMemory64.WriteRaw7(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 8:
+                        UnsafeMemory64.WriteRaw8(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 9:
+                        UnsafeMemory64.WriteRaw9(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 10:
+                        UnsafeMemory64.WriteRaw10(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 11:
+                        UnsafeMemory64.WriteRaw11(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 12:
+                        UnsafeMemory64.WriteRaw12(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 13:
+                        UnsafeMemory64.WriteRaw13(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 14:
+                        UnsafeMemory64.WriteRaw14(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 15:
+                        UnsafeMemory64.WriteRaw15(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 16:
+                        UnsafeMemory64.WriteRaw16(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 17:
+                        UnsafeMemory64.WriteRaw17(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 18:
+                        UnsafeMemory64.WriteRaw18(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 19:
+                        UnsafeMemory64.WriteRaw19(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 20:
+                        UnsafeMemory64.WriteRaw20(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 21:
+                        UnsafeMemory64.WriteRaw21(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 22:
+                        UnsafeMemory64.WriteRaw22(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 23:
+                        UnsafeMemory64.WriteRaw23(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 24:
+                        UnsafeMemory64.WriteRaw24(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 25:
+                        UnsafeMemory64.WriteRaw25(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 26:
+                        UnsafeMemory64.WriteRaw26(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 27:
+                        UnsafeMemory64.WriteRaw27(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 28:
+                        UnsafeMemory64.WriteRaw28(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 29:
+                        UnsafeMemory64.WriteRaw29(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 30:
+                        UnsafeMemory64.WriteRaw30(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    case 31:
+                        UnsafeMemory64.WriteRaw31(ref bytes, offset, rawMessagePackBlock);
+                        break;
+                    default:
+                        Buffer.BlockCopy(rawMessagePackBlock, 0, bytes, offset, rawMessagePackBlock.Length);
+                        break;
+                }
+            }
+#else
+            Buffer.BlockCopy(rawMessagePackBlock, 0, bytes, offset, rawMessagePackBlock.Length);
+#endif
+            return rawMessagePackBlock.Length;
         }
 
         /// <summary>
@@ -1553,6 +1783,46 @@ namespace MessagePack
                 bytes[offset + 4] = unchecked((byte)byteCount);
                 Buffer.BlockCopy(utf8stringBytes, 0, bytes, offset + 5, byteCount);
                 return byteCount + 5;
+            }
+        }
+
+        public static byte[] GetEncodedStringBytes(string value)
+        {
+            var byteCount = StringEncoding.UTF8.GetByteCount(value);
+            if (byteCount <= MessagePackRange.MaxFixStringLength)
+            {
+                var bytes = new byte[byteCount + 1];
+                bytes[0] = (byte)(MessagePackCode.MinFixStr | byteCount);
+                StringEncoding.UTF8.GetBytes(value, 0, value.Length, bytes, 1);
+                return bytes;
+            }
+            else if (byteCount <= byte.MaxValue)
+            {
+                var bytes = new byte[byteCount + 2];
+                bytes[0] = MessagePackCode.Str8;
+                bytes[1] = unchecked((byte)byteCount);
+                StringEncoding.UTF8.GetBytes(value, 0, value.Length, bytes, 2);
+                return bytes;
+            }
+            else if (byteCount <= ushort.MaxValue)
+            {
+                var bytes = new byte[byteCount + 3];
+                bytes[0] = MessagePackCode.Str16;
+                bytes[1] = unchecked((byte)(byteCount >> 8));
+                bytes[2] = unchecked((byte)byteCount);
+                StringEncoding.UTF8.GetBytes(value, 0, value.Length, bytes, 3);
+                return bytes;
+            }
+            else
+            {
+                var bytes = new byte[byteCount + 5];
+                bytes[0] = MessagePackCode.Str32;
+                bytes[1] = unchecked((byte)(byteCount >> 24));
+                bytes[2] = unchecked((byte)(byteCount >> 16));
+                bytes[3] = unchecked((byte)(byteCount >> 8));
+                bytes[4] = unchecked((byte)byteCount);
+                StringEncoding.UTF8.GetBytes(value, 0, value.Length, bytes, 5);
+                return bytes;
             }
         }
 
