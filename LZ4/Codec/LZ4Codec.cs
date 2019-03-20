@@ -1,6 +1,4 @@
-﻿#if ENABLE_UNSAFE_MSGPACK
-
-#region license
+﻿#region license
 
 /*
 Copyright (c) 2013, Milosz Krajewski
@@ -116,6 +114,8 @@ namespace MessagePack.LZ4
         private const int MAX_NB_ATTEMPTS = 256;
         private const int OPTIMAL_ML = (ML_MASK - 1) + MINMATCH;
 
+        private const int BLOCK_COPY_LIMIT = 16;
+
         #endregion
 
         #region public interface (common)
@@ -156,5 +156,3 @@ namespace MessagePack.LZ4
 }
 
 // ReSharper restore InconsistentNaming
-
-#endif
