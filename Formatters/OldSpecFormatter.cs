@@ -9,11 +9,6 @@ namespace MessagePack.Formatters
     {
         public static readonly NativeDateTimeFormatter Instance = new NativeDateTimeFormatter();
 
-        NativeDateTimeFormatter()
-        {
-
-        }
-
         public int Serialize(ref byte[] bytes, int offset, DateTime value, IFormatterResolver formatterResolver)
         {
             var dateData = value.ToBinary();
@@ -35,11 +30,6 @@ namespace MessagePack.Formatters
     public sealed class NativeDateTimeArrayFormatter : IMessagePackFormatter<DateTime[]>
     {
         public static readonly NativeDateTimeArrayFormatter Instance = new NativeDateTimeArrayFormatter();
-
-        NativeDateTimeArrayFormatter()
-        {
-
-        }
 
         public int Serialize(ref byte[] bytes, int offset, DateTime[] value, IFormatterResolver formatterResolver)
         {
@@ -97,11 +87,6 @@ namespace MessagePack.Formatters
     public sealed class OldSpecStringFormatter : IMessagePackFormatter<string>
     {
         public static readonly OldSpecStringFormatter Instance = new OldSpecStringFormatter();
-
-        OldSpecStringFormatter()
-        {
-
-        }
 
         // Old spec does not exists str 8 format.
         public int Serialize(ref byte[] bytes, int offset, string value, IFormatterResolver formatterResolver)
@@ -178,11 +163,6 @@ namespace MessagePack.Formatters
     public sealed class OldSpecBinaryFormatter : IMessagePackFormatter<byte[]>
     {
         public static readonly OldSpecBinaryFormatter Instance = new OldSpecBinaryFormatter();
-
-        OldSpecBinaryFormatter()
-        {
-
-        }
 
         public int Serialize(ref byte[] bytes, int offset, byte[] value, IFormatterResolver formatterResolver)
         {
