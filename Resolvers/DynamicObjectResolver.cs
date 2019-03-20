@@ -209,18 +209,16 @@ namespace MessagePack.Internal
             var formatterType = typeof(IMessagePackFormatter<>).MakeGenericType(type);
             var typeBuilder = assembly.ModuleBuilder.DefineType("MessagePack.Formatters." + SubtractFullNameRegex.Replace(type.FullName, "").Replace(".", "_") + "Formatter", TypeAttributes.Public | TypeAttributes.Sealed, null, new[] { formatterType });
 
-            FieldBuilder dictionaryField = null;
             FieldBuilder stringByteKeysField = null;
 
             // string key needs string->int mapper for deserialize switch statement
             if (serializationInfo.IsStringKey)
             {
                 var method = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, Type.EmptyTypes);
-                dictionaryField = typeBuilder.DefineField("keyMapping", typeof(ByteArrayStringHashTable), FieldAttributes.Private | FieldAttributes.InitOnly);
                 stringByteKeysField = typeBuilder.DefineField("stringByteKeys", typeof(byte[][]), FieldAttributes.Private | FieldAttributes.InitOnly);
 
                 var il = method.GetILGenerator();
-                BuildConstructor(type, serializationInfo, method, dictionaryField, stringByteKeysField, il);
+                BuildConstructor(type, serializationInfo, method, stringByteKeysField, il);
             }
             {
                 var method = typeBuilder.DefineMethod("Serialize", MethodAttributes.Public | MethodAttributes.Final | MethodAttributes.Virtual,
@@ -237,32 +235,16 @@ namespace MessagePack.Internal
                     new Type[] { typeof(byte[]), typeof(int), typeof(IFormatterResolver), typeof(int).MakeByRefType() });
 
                 var il = method.GetILGenerator();
-                BuildDeserialize(type, serializationInfo, method, dictionaryField, il);
+                BuildDeserialize(type, serializationInfo, method, il);
             }
 
             return typeBuilder.CreateTypeInfo();
         }
 
-        static void BuildConstructor(Type type, ObjectSerializationInfo info, ConstructorInfo method, FieldBuilder dictionaryField, FieldBuilder stringByteKeysField, ILGenerator il)
+        static void BuildConstructor(Type type, ObjectSerializationInfo info, ConstructorInfo method, FieldBuilder stringByteKeysField, ILGenerator il)
         {
             il.EmitLdarg(0);
             il.Emit(OpCodes.Call, objectCtor);
-
-            il.EmitLdarg(0);
-            il.EmitLdc_I4(info.Members.Length);
-            il.Emit(OpCodes.Newobj, dictionaryConstructor);
-
-            foreach (var item in info.Members)
-            {
-                il.Emit(OpCodes.Dup);
-                il.Emit(OpCodes.Ldstr, item.StringKey);
-                il.EmitLdc_I4(item.IntKey);
-                il.EmitCall(dictionaryAdd);
-            }
-
-            il.Emit(OpCodes.Stfld, dictionaryField);
-
-            //
 
             var writeCount = info.Members.Count(x => x.IsReadable);
             il.EmitLdarg(0);
@@ -471,7 +453,7 @@ namespace MessagePack.Internal
         }
 
         // T Deserialize([arg:1]byte[] bytes, [arg:2]int offset, [arg:3]IFormatterResolver formatterResolver, [arg:4]out int readSize);
-        static void BuildDeserialize(Type type, ObjectSerializationInfo info, MethodBuilder method, FieldBuilder dictionaryField, ILGenerator il)
+        static void BuildDeserialize(Type type, ObjectSerializationInfo info, MethodBuilder method, ILGenerator il)
         {
             // if(MessagePackBinary.IsNil) readSize = 1, return null;
             var falseLabel = il.DefineLabel();
@@ -563,48 +545,107 @@ namespace MessagePack.Internal
                     {
                         MemberInfo = item,
                         LocalField = il.DeclareLocal(item.Type),
-                        SwitchLabel = il.DefineLabel()
+                        // SwitchLabel = il.DefineLabel()
                     })
                     .ToArray();
             }
 
-
             // Read Loop(for var i = 0; i< length; i++)
+            if (info.IsStringKey)
+            {
+                var automata = new AutomataDictionary();
+                for (int i = 0; i < info.Members.Length; i++)
+                {
+                    automata.Add(info.Members[i].StringKey, i);
+                }
+
+                var buffer = il.DeclareLocal(typeof(byte).MakeByRefType(), true);
+                var keyArraySegment = il.DeclareLocal(typeof(ArraySegment<byte>));
+                var longKey = il.DeclareLocal(typeof(ulong));
+                var p = il.DeclareLocal(typeof(byte*));
+                var rest = il.DeclareLocal(typeof(int));
+
+                // fixed (byte* buffer = &bytes[0]) {
+                il.EmitLdarg(1);
+                il.EmitLdc_I4(0);
+                il.Emit(OpCodes.Ldelema, typeof(byte));
+                il.EmitStloc(buffer);
+
+                // for (int i = 0; i < len; i++)
+                il.EmitIncrementFor(length, forILocal =>
+                {
+                    var readNext = il.DefineLabel();
+                    var loopEnd = il.DefineLabel();
+
+                    il.EmitLdarg(1);
+                    il.EmitLdarg(2);
+                    il.EmitLdarg(4);
+                    il.EmitCall(MessagePackBinaryTypeInfo.ReadStringSegment);
+                    il.EmitStloc(keyArraySegment);
+                    EmitOffsetPlusReadSize(il);
+
+                    // p = buffer + arraySegment.Offset
+                    il.EmitLdloc(buffer);
+                    il.Emit(OpCodes.Conv_I);
+                    il.EmitLdloca(keyArraySegment);
+                    il.EmitCall(typeof(ArraySegment<byte>).GetRuntimeProperty("Offset").GetGetMethod());
+                    il.Emit(OpCodes.Add);
+                    il.EmitStloc(p);
+
+                    // rest = arraySegment.Count
+                    il.EmitLdloca(keyArraySegment);
+                    il.EmitCall(typeof(ArraySegment<byte>).GetRuntimeProperty("Count").GetGetMethod());
+                    il.EmitStloc(rest);
+
+                    // if(rest == 0) goto End
+                    il.EmitLdloc(rest);
+                    il.Emit(OpCodes.Brfalse, readNext);
+
+                    // gen automata name lookup
+                    automata.EmitMatch(il, p, rest, longKey, x =>
+                    {
+                        var i = x.Value;
+                        if (infoList[i].MemberInfo != null)
+                        {
+                            EmitDeserializeValue(il, infoList[i]);
+                            il.Emit(OpCodes.Br, loopEnd);
+                        }
+                        else
+                        {
+                            il.Emit(OpCodes.Br, readNext);
+                        }
+                    }, () =>
+                    {
+                        il.Emit(OpCodes.Br, readNext);
+                    });
+
+                    il.MarkLabel(readNext);
+                    il.EmitLdarg(4);
+                    il.EmitLdarg(1);
+                    il.EmitLdarg(2);
+                    il.EmitCall(MessagePackBinaryTypeInfo.ReadNextBlock);
+                    il.Emit(OpCodes.Stind_I4);
+
+                    il.MarkLabel(loopEnd);
+                    EmitOffsetPlusReadSize(il);
+                });
+
+                // end fixed
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Conv_U);
+                il.EmitStloc(buffer);
+            }
+            else
             {
                 var key = il.DeclareLocal(typeof(int));
                 var switchDefault = il.DefineLabel();
-                var loopEnd = il.DefineLabel();
-                var stringKeyTrue = il.DefineLabel();
+
                 il.EmitIncrementFor(length, forILocal =>
                 {
-                    if (info.IsStringKey)
-                    {
-                        // get string key -> dictionary lookup
-                        il.EmitLdarg(0);
-                        il.Emit(OpCodes.Ldfld, dictionaryField);
-                        il.EmitLdarg(1);
-                        il.EmitLdarg(2);
-                        il.EmitLdarg(4);
-                        il.EmitCall(MessagePackBinaryTypeInfo.ReadStringSegment);
-                        il.EmitLdloca(key);
-                        il.EmitCall(dictionaryTryGetValue);
-                        EmitOffsetPlusReadSize(il);
-                        il.Emit(OpCodes.Brtrue_S, stringKeyTrue);
+                    var loopEnd = il.DefineLabel();
 
-                        il.EmitLdarg(4);
-                        il.EmitLdarg(1);
-                        il.EmitLdarg(2);
-                        il.EmitCall(MessagePackBinaryTypeInfo.ReadNextBlock);
-                        il.Emit(OpCodes.Stind_I4);
-                        il.Emit(OpCodes.Br, loopEnd);
-
-                        il.MarkLabel(stringKeyTrue);
-                    }
-                    else
-                    {
-                        il.EmitLdloc(forILocal);
-                        il.EmitStloc(key);
-                    }
+                    il.EmitLdloc(forILocal);
+                    il.EmitStloc(key);
 
                     // switch... local = Deserialize
                     il.EmitLdloc(key);
@@ -817,9 +858,9 @@ namespace MessagePack.Internal
         static readonly MethodInfo getFormatterWithVerify = typeof(FormatterResolverExtensions).GetRuntimeMethods().First(x => x.Name == "GetFormatterWithVerify");
         static readonly Func<Type, MethodInfo> getSerialize = t => typeof(IMessagePackFormatter<>).MakeGenericType(t).GetRuntimeMethod("Serialize", new[] { refByte, typeof(int), t, typeof(IFormatterResolver) });
         static readonly Func<Type, MethodInfo> getDeserialize = t => typeof(IMessagePackFormatter<>).MakeGenericType(t).GetRuntimeMethod("Deserialize", new[] { typeof(byte[]), typeof(int), typeof(IFormatterResolver), refInt });
-        static readonly ConstructorInfo dictionaryConstructor = typeof(ByteArrayStringHashTable).GetTypeInfo().DeclaredConstructors.First(x => { var p = x.GetParameters(); return p.Length == 1 && p[0].ParameterType == typeof(int); });
-        static readonly MethodInfo dictionaryAdd = typeof(ByteArrayStringHashTable).GetRuntimeMethod("Add", new[] { typeof(string), typeof(int) });
-        static readonly MethodInfo dictionaryTryGetValue = typeof(ByteArrayStringHashTable).GetRuntimeMethod("TryGetValue", new[] { typeof(ArraySegment<byte>), refInt });
+        // static readonly ConstructorInfo dictionaryConstructor = typeof(ByteArrayStringHashTable).GetTypeInfo().DeclaredConstructors.First(x => { var p = x.GetParameters(); return p.Length == 1 && p[0].ParameterType == typeof(int); });
+        // static readonly MethodInfo dictionaryAdd = typeof(ByteArrayStringHashTable).GetRuntimeMethod("Add", new[] { typeof(string), typeof(int) });
+        // static readonly MethodInfo dictionaryTryGetValue = typeof(ByteArrayStringHashTable).GetRuntimeMethod("TryGetValue", new[] { typeof(ArraySegment<byte>), refInt });
         static readonly ConstructorInfo invalidOperationExceptionConstructor = typeof(System.InvalidOperationException).GetTypeInfo().DeclaredConstructors.First(x => { var p = x.GetParameters(); return p.Length == 1 && p[0].ParameterType == typeof(string); });
 
         static readonly MethodInfo onBeforeSerialize = typeof(IMessagePackSerializationCallbackReceiver).GetRuntimeMethod("OnBeforeSerialize", Type.EmptyTypes);
@@ -1300,10 +1341,18 @@ namespace MessagePack.Internal
             }
 
             // GetConstructor
+            IEnumerator<ConstructorInfo> ctorEnumerator = null;
             var ctor = ti.DeclaredConstructors.Where(x => x.IsPublic).SingleOrDefault(x => x.GetCustomAttribute<SerializationConstructorAttribute>(false) != null);
             if (ctor == null)
             {
-                ctor = ti.DeclaredConstructors.Where(x => x.IsPublic).OrderBy(x => x.GetParameters().Length).FirstOrDefault();
+                ctorEnumerator = 
+                    ti.DeclaredConstructors.Where(x => x.IsPublic).OrderBy(x => x.GetParameters().Length)
+                    .GetEnumerator();
+
+                if (ctorEnumerator.MoveNext())
+                {
+                    ctor = ctorEnumerator.Current;
+                }
             }
             // struct allows null ctor
             if (ctor == null && isClass) throw new MessagePackDynamicObjectResolverException("can't find public constructor. type:" + type.FullName);
@@ -1312,56 +1361,104 @@ namespace MessagePack.Internal
             if (ctor != null)
             {
                 var constructorLookupDictionary = stringMembers.ToLookup(x => x.Key, x => x, StringComparer.OrdinalIgnoreCase);
-
-                var ctorParamIndex = 0;
-                foreach (var item in ctor.GetParameters())
+                do
                 {
-                    EmittableMember paramMember;
-                    if (isIntKey)
+                    constructorParameters.Clear();
+                    var ctorParamIndex = 0;
+                    foreach (var item in ctor.GetParameters())
                     {
-                        if (intMembers.TryGetValue(ctorParamIndex, out paramMember))
+                        EmittableMember paramMember;
+                        if (isIntKey)
                         {
-                            if (item.ParameterType == paramMember.Type && paramMember.IsReadable)
+                            if (intMembers.TryGetValue(ctorParamIndex, out paramMember))
                             {
-                                constructorParameters.Add(paramMember);
+                                if (item.ParameterType == paramMember.Type && paramMember.IsReadable)
+                                {
+                                    constructorParameters.Add(paramMember);
+                                }
+                                else
+                                {
+                                    if (ctorEnumerator != null)
+                                    {
+                                        ctor = null;
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, parameterType mismatch. type:" + type.FullName + " parameterIndex:" + ctorParamIndex + " paramterType:" + item.ParameterType.Name);
+                                    }
+                                }
                             }
                             else
                             {
-                                throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, parameterType mismatch. type:" + type.FullName + " parameterIndex:" + ctorParamIndex + " paramterType:" + item.ParameterType.Name);
+                                if (ctorEnumerator != null)
+                                {
+                                    ctor = null;
+                                    continue;
+                                }
+                                else
+                                {
+                                    throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, index not found. type:" + type.FullName + " parameterIndex:" + ctorParamIndex);
+                                }
                             }
                         }
                         else
                         {
-                            throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, index not found. type:" + type.FullName + " parameterIndex:" + ctorParamIndex);
-                        }
-                    }
-                    else
-                    {
-                        var hasKey = constructorLookupDictionary[item.Name];
-                        var len = hasKey.Count();
-                        if (len != 0)
-                        {
-                            if (len != 1)
+                            var hasKey = constructorLookupDictionary[item.Name];
+                            var len = hasKey.Count();
+                            if (len != 0)
                             {
-                                throw new MessagePackDynamicObjectResolverException("duplicate matched constructor parameter name:" + type.FullName + " parameterName:" + item.Name + " paramterType:" + item.ParameterType.Name);
-                            }
+                                if (len != 1)
+                                {
+                                    if (ctorEnumerator != null)
+                                    {
+                                        ctor = null;
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        throw new MessagePackDynamicObjectResolverException("duplicate matched constructor parameter name:" + type.FullName + " parameterName:" + item.Name + " paramterType:" + item.ParameterType.Name);
+                                    }
+                                }
 
-                            paramMember = hasKey.First().Value;
-                            if (item.ParameterType == paramMember.Type && paramMember.IsReadable)
-                            {
-                                constructorParameters.Add(paramMember);
+                                paramMember = hasKey.First().Value;
+                                if (item.ParameterType == paramMember.Type && paramMember.IsReadable)
+                                {
+                                    constructorParameters.Add(paramMember);
+                                }
+                                else
+                                {
+                                    if (ctorEnumerator != null)
+                                    {
+                                        ctor = null;
+                                        continue;
+                                    }
+                                    else
+                                    {
+                                        throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, parameterType mismatch. type:" + type.FullName + " parameterName:" + item.Name + " paramterType:" + item.ParameterType.Name);
+                                    }
+                                }
                             }
                             else
                             {
-                                throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, parameterType mismatch. type:" + type.FullName + " parameterName:" + item.Name + " paramterType:" + item.ParameterType.Name);
+                                if (ctorEnumerator != null)
+                                {
+                                    ctor = null;
+                                    continue;
+                                }
+                                else
+                                {
+                                    throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, index not found. type:" + type.FullName + " parameterName:" + item.Name);
+                                }
                             }
                         }
-                        else
-                        {
-                            throw new MessagePackDynamicObjectResolverException("can't find matched constructor parameter, index not found. type:" + type.FullName + " parameterName:" + item.Name);
-                        }
+                        ctorParamIndex++;
                     }
-                    ctorParamIndex++;
+                } while (TryGetNextConstructor(ctorEnumerator, ref ctor));
+
+                if (ctor == null)
+                {
+                    throw new MessagePackDynamicObjectResolverException("can't find matched constructor. type:" + type.FullName);
                 }
             }
 
@@ -1373,6 +1470,25 @@ namespace MessagePack.Internal
                 IsIntKey = isIntKey,
                 Members = (isIntKey) ? intMembers.Values.ToArray() : stringMembers.Values.ToArray()
             };
+        }
+
+        static bool TryGetNextConstructor(IEnumerator<ConstructorInfo> ctorEnumerator, ref ConstructorInfo ctor)
+        {
+            if (ctorEnumerator == null || ctor != null)
+            {
+                return false;
+            }
+
+            if (ctorEnumerator.MoveNext())
+            {
+                ctor = ctorEnumerator.Current;
+                return true;
+            }
+            else
+            {
+                ctor = null;
+                return false;
+            }
         }
 
         public class EmittableMember
