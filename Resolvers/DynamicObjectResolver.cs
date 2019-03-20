@@ -5,6 +5,8 @@ using MessagePack.Internal;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using System.Runtime.Serialization;
 
 namespace MessagePack.Resolvers
 {
@@ -141,13 +143,19 @@ namespace MessagePack.Internal
 {
     internal static class DynamicObjectTypeBuilder
     {
+#if NETSTANDARD1_4
+        static readonly Regex SubtractFullNameRegex = new Regex(@", Version=\d+.\d+.\d+.\d+, Culture=\w+, PublicKeyToken=\w+", RegexOptions.Compiled);
+#else
+        static readonly Regex SubtractFullNameRegex = new Regex(@", Version=\d+.\d+.\d+.\d+, Culture=\w+, PublicKeyToken=\w+");
+#endif
+
         public static TypeInfo BuildType(DynamicAssembly assembly, Type type, bool forceStringKey)
         {
             var serializationInfo = MessagePack.Internal.ObjectSerializationInfo.CreateOrNull(type, forceStringKey);
             if (serializationInfo == null) return null;
 
             var formatterType = typeof(IMessagePackFormatter<>).MakeGenericType(type);
-            var typeBuilder = assembly.ModuleBuilder.DefineType("MessagePack.Formatters." + type.FullName.Replace(".", "_") + "Formatter", TypeAttributes.Public | TypeAttributes.Sealed, null, new[] { formatterType });
+            var typeBuilder = assembly.ModuleBuilder.DefineType("MessagePack.Formatters." + SubtractFullNameRegex.Replace(type.FullName, "").Replace(".", "_") + "Formatter", TypeAttributes.Public | TypeAttributes.Sealed, null, new[] { formatterType });
 
             FieldBuilder dictionaryField = null;
 
@@ -991,11 +999,12 @@ namespace MessagePack.Internal
             {
                 // All public members are serialize target except [Ignore] member.
                 isIntKey = false;
-
+                
                 var hiddenIntKey = 0;
                 foreach (var item in type.GetRuntimeProperties())
                 {
                     if (item.GetCustomAttribute<IgnoreMemberAttribute>(true) != null) continue;
+                    if (item.GetCustomAttribute<IgnoreDataMemberAttribute>(true) != null) continue;
 
                     var member = new EmittableMember
                     {
@@ -1011,6 +1020,7 @@ namespace MessagePack.Internal
                 foreach (var item in type.GetRuntimeFields())
                 {
                     if (item.GetCustomAttribute<IgnoreMemberAttribute>(true) != null) continue;
+                    if (item.GetCustomAttribute<IgnoreDataMemberAttribute>(true) != null) continue;
                     if (item.GetCustomAttribute<System.Runtime.CompilerServices.CompilerGeneratedAttribute>(true) != null) continue;
                     if (item.IsStatic) continue;
 
@@ -1035,7 +1045,8 @@ namespace MessagePack.Internal
                 foreach (var item in type.GetRuntimeProperties())
                 {
                     if (item.GetCustomAttribute<IgnoreMemberAttribute>(true) != null) continue;
-
+                    if (item.GetCustomAttribute<IgnoreDataMemberAttribute>(true) != null) continue;
+                    
                     var member = new EmittableMember
                     {
                         PropertyInfo = item,
@@ -1082,6 +1093,7 @@ namespace MessagePack.Internal
                 foreach (var item in type.GetRuntimeFields())
                 {
                     if (item.GetCustomAttribute<IgnoreMemberAttribute>(true) != null) continue;
+                    if (item.GetCustomAttribute<IgnoreDataMemberAttribute>(true) != null) continue;
                     if (item.GetCustomAttribute<System.Runtime.CompilerServices.CompilerGeneratedAttribute>(true) != null) continue;
                     if (item.IsStatic) continue;
 
