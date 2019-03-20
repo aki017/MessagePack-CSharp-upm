@@ -21,11 +21,6 @@ namespace MessagePack.Internal
             this.loadFactor = loadFactor;
         }
 
-        public bool TryAdd(Type key, TValue value)
-        {
-            return TryAdd(key, _ => value); // create lambda capture
-        }
-
         public bool TryAdd(Type key, Func<Type, TValue> valueFactory)
         {
             TValue _;
