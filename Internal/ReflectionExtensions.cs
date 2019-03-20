@@ -1,4 +1,4 @@
-﻿#if !UNITY_METRO
+﻿#if !UNITY_WSA
 
 using System;
 using System.Collections.Generic;
@@ -26,6 +26,11 @@ namespace MessagePack.Internal
                 && type.IsGenericType && type.Name.Contains("AnonymousType")
                 && (type.Name.StartsWith("<>") || type.Name.StartsWith("VB$"))
                 && (type.Attributes & TypeAttributes.NotPublic) == TypeAttributes.NotPublic;
+        }
+
+        public static bool IsIndexer(this System.Reflection.PropertyInfo propertyInfo)
+        {
+            return propertyInfo.GetIndexParameters().Length > 0;
         }
 
 #if NETSTANDARD1_4
