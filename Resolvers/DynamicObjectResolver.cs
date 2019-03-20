@@ -1,4 +1,6 @@
-﻿using System;
+﻿#if !UNITY_METRO
+
+using System;
 using System.Linq;
 using MessagePack.Formatters;
 using MessagePack.Internal;
@@ -14,7 +16,7 @@ namespace MessagePack.Resolvers
     /// <summary>
     /// ObjectResolver by dynamic code generation.
     /// </summary>
-    public class DynamicObjectResolver : IFormatterResolver
+    public sealed class DynamicObjectResolver : IFormatterResolver
     {
         public static readonly DynamicObjectResolver Instance = new DynamicObjectResolver();
 
@@ -75,7 +77,7 @@ namespace MessagePack.Resolvers
     /// <summary>
     /// ObjectResolver by dynamic code generation, no needs MessagePackObject attribute and serialized key as string.
     /// </summary>
-    public class DynamicContractlessObjectResolver : IFormatterResolver
+    public sealed class DynamicContractlessObjectResolver : IFormatterResolver
     {
         public static readonly DynamicContractlessObjectResolver Instance = new DynamicContractlessObjectResolver();
 
@@ -1409,3 +1411,5 @@ namespace MessagePack.Internal
         }
     }
 }
+
+#endif

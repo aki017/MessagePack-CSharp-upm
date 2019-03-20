@@ -5,7 +5,7 @@ namespace MessagePack.Resolvers
     /// <summary>
     /// Default composited resolver, builtin -> attribute -> dynamic enum -> dynamic generic -> dynamic union -> dynamic object -> primitive.
     /// </summary>
-    public class StandardResolver : IFormatterResolver
+    public sealed class StandardResolver : IFormatterResolver
     {
         public static readonly IFormatterResolver Instance = new StandardResolver();
 
@@ -19,7 +19,7 @@ namespace MessagePack.Resolvers
             MessagePack.Unity.UnityResolver.Instance,
 #endif
 
-#if !ENABLE_IL2CPP
+#if !ENABLE_IL2CPP && !UNITY_METRO
 
             DynamicEnumResolver.Instance, // Try Enum
             DynamicGenericResolver.Instance, // Try Array, Tuple, Collection
@@ -59,7 +59,7 @@ namespace MessagePack.Resolvers
         }
     }
 
-    public class ContractlessStandardResolver : IFormatterResolver
+    public sealed class ContractlessStandardResolver : IFormatterResolver
     {
         public static readonly IFormatterResolver Instance = new ContractlessStandardResolver();
 
@@ -73,15 +73,14 @@ namespace MessagePack.Resolvers
             MessagePack.Unity.UnityResolver.Instance,
 #endif
 
-#if !ENABLE_IL2CPP
+#if !ENABLE_IL2CPP && !UNITY_METRO
 
             DynamicEnumResolver.Instance, // Try Enum
             DynamicGenericResolver.Instance, // Try Array, Tuple, Collection
             DynamicUnionResolver.Instance, // Try Union(Interface)
             DynamicObjectResolver.Instance, // Try Object
-#endif
-
             DynamicContractlessObjectResolver.Instance, // Serializes keys as strings
+#endif
 
             // finally, try primitive -> dynamic contractless
 #if NETSTANDARD1_4

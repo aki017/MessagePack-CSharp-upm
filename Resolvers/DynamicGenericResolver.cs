@@ -1,4 +1,6 @@
-﻿using MessagePack.Formatters;
+﻿#if !UNITY_METRO
+
+using MessagePack.Formatters;
 using System.Linq;
 using MessagePack.Internal;
 using System;
@@ -12,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace MessagePack.Resolvers
 {
-    public class DynamicGenericResolver : IFormatterResolver
+    public sealed class DynamicGenericResolver : IFormatterResolver
     {
         public static readonly IFormatterResolver Instance = new DynamicGenericResolver();
 
@@ -276,3 +278,5 @@ namespace MessagePack.Internal
         }
     }
 }
+
+#endif

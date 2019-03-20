@@ -9,10 +9,12 @@ using System.Text.RegularExpressions;
 
 namespace MessagePack.Resolvers
 {
+#if !UNITY_METRO
+
     /// <summary>
     /// UnionResolver by dynamic code generation.
     /// </summary>
-    public class DynamicUnionResolver : IFormatterResolver
+    public sealed class DynamicUnionResolver : IFormatterResolver
     {
         public static readonly DynamicUnionResolver Instance = new DynamicUnionResolver();
 
@@ -471,6 +473,8 @@ namespace MessagePack.Resolvers
             }
         }
     }
+
+#endif
 }
 
 namespace MessagePack.Internal
