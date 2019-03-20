@@ -236,7 +236,7 @@ namespace MessagePack.Formatters
             }
             else
             {
-                return new Uri(MessagePackBinary.ReadString(bytes, offset, out readSize));
+                return new Uri(MessagePackBinary.ReadString(bytes, offset, out readSize), UriKind.RelativeOrAbsolute);
             }
         }
     }
@@ -489,6 +489,7 @@ namespace MessagePack.Formatters
     public class TaskUnitFormatter : IMessagePackFormatter<Task>
     {
         public static readonly IMessagePackFormatter<Task> Instance = new TaskUnitFormatter();
+        static readonly Task CompletedTask = Task.FromResult<object>(null);
 
         TaskUnitFormatter()
         {
@@ -517,7 +518,7 @@ namespace MessagePack.Formatters
             else
             {
                 readSize = 1;
-                return Task.CompletedTask;
+                return CompletedTask;
             }
         }
     }
